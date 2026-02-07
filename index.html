@@ -91,15 +91,10 @@
   <div class="wrap">
     <h1>🗞️ Clipping automático — STF</h1>
     <p class="subhead">
-      Lista única de notícias sobre o STF e seus ministros (atuais e ex), ordenada pelo horário de publicação.
-      <br/>Inclui “Carregar mais” e “Gerar resumo para WhatsApp”.
+      Lista única de notícias sobre o STF e seus ministros, ordenada pela hora real de publicação.
     </p>
 
     <div class="row">
-      <select id="source">
-        <option value="ALL">Todos os jornais</option>
-      </select>
-
       <button id="refreshBtn" class="primary">Atualizar agora</button>
       <button id="summaryBtn">Gerar resumo para WhatsApp</button>
     </div>
@@ -118,10 +113,15 @@
 </main>
 
 <footer class="wrap">
-  Este site é um agregador de links de notícias públicas. Todo o conteúdo pertence aos veículos originais.
+  Este site é um agregador de links de notícias públicas.
+  Todo o conteúdo pertence aos veículos originais.
 </footer>
 
 <script>
+/* ================= CONFIG ================= */
+const PAGE_SIZE = 30;
+const SUMMARY_MAX = 10;
+
 /* ================= FONTES (RSS) ================= */
 const FEEDS = [
   { name:"UOL", url:"https://rss.uol.com.br/feed/noticias.xml" },
@@ -170,16 +170,11 @@ const KEYWORDS = [
   "nunes marques","nunes"
 ];
 
-/* ================= CONFIG PAGINAÇÃO/RESUMO ================= */
-const PAGE_SIZE = 30;     // quantas notícias aparecem por vez
-const SUMMARY_MAX = 10;   // quantas notícias entram no resumo do WhatsApp
-
-/* ================= RSS -> JSON (GitHub Pages) ================= */
+/* ================= UTIL ================= */
 const RSS2JSON = url =>
   `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
 
 const els = {
-  source: document.getElementById("source"),
   refresh: document.getElementById("refreshBtn"),
   summary: document.getElementById("summaryBtn"),
   loadMore: document.getElementById("loadMoreBtn"),
@@ -189,144 +184,78 @@ const els = {
 };
 
 function normalize(t){
-  return (t||"").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  return (t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
 function matchesSTF(item){
-  const text = normalize(`${item.title} ${item.description||""}`);
+  const text = normalize(item.title + " " + (item.description||""));
   return KEYWORDS.some(k => text.includes(normalize(k)));
 }
 
-/**
- * Parser robusto:
- * - Se vier sem timezone, assume UTC (Z), evitando "virar o dia/hora" errado.
- */
 function parseFeedDate(raw){
   if(!raw) return null;
-  const s = String(raw).trim();
-
-  // já tem timezone explícito (Z, +03:00, -0300, GMT, UTC)
-  if (/(Z|[+-]\d{2}:?\d{2}|GMT|UTC)\b/i.test(s)) {
-    const d = new Date(s);
-    return isNaN(d) ? null : d;
-  }
-
-  // "YYYY-MM-DD HH:MM(:SS)?"
-  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(s)) {
-    let iso = s.replace(/\s+/, "T");
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso)) iso += ":00";
-    iso += "Z"; // assume UTC
-    const d = new Date(iso);
-    return isNaN(d) ? null : d;
-  }
-
-  // ISO sem timezone "YYYY-MM-DDTHH:MM(:SS)?"
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) {
-    let iso = s;
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso)) iso += ":00";
-    iso += "Z"; // assume UTC
-    const d = new Date(iso);
-    return isNaN(d) ? null : d;
-  }
-
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
+  let s = String(raw).trim();
+  if (/(Z|[+-]\d{2}:?\d{2}|GMT|UTC)\b/i.test(s)) return new Date(s);
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s)) s = s.replace(" ","T") + "Z";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) s += ":00Z";
+  return new Date(s);
 }
 
-/* Data + hora exibidas em Brasília */
-function formatDateTimeBR(date){
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+function formatDateTimeBR(d){
+  return new Intl.DateTimeFormat("pt-BR",{
+    timeZone:"America/Sao_Paulo",
+    day:"2-digit",month:"2-digit",year:"numeric",
+    hour:"2-digit",minute:"2-digit"
+  }).format(d);
 }
 
-/* ================= ESTADO (para Carregar Mais) ================= */
-let allFiltered = [];   // lista completa já filtrada e ordenada
-let shownCount = 0;     // quantos já estão na tela
+/* ================= ESTADO ================= */
+let allFiltered = [];
+let shownCount = 0;
 
-function updateCountInfo(){
-  const total = allFiltered.length;
-  els.countInfo.textContent = total
-    ? `Mostrando ${Math.min(shownCount, total)} de ${total}`
-    : "";
-  els.loadMore.style.display = (shownCount < total) ? "inline-block" : "none";
-  els.summary.disabled = (Math.min(shownCount, total) === 0);
-}
+/* ================= RENDER ================= */
+function render(reset=false){
+  if(reset) els.list.innerHTML = "";
 
-function render(reset = false){
-  if (reset) els.list.innerHTML = "";
-
-  const total = allFiltered.length;
   const slice = allFiltered.slice(0, shownCount);
-
-  if (!total) {
+  if(!slice.length){
     els.list.innerHTML = "<div class='card'>Nenhuma notícia encontrada.</div>";
-    updateCountInfo();
     return;
   }
 
-  // Renderiza somente os itens que ainda não estavam na tela
-  const start = reset ? 0 : Math.max(0, slice.length - PAGE_SIZE);
-  for (let i = start; i < slice.length; i++) {
-    const n = slice[i];
-    const wa = `https://wa.me/?text=${encodeURIComponent(n.title + "\n" + n.link)}`;
-
+  slice.slice(reset?0:shownCount-PAGE_SIZE).forEach(n=>{
+    const wa = `https://wa.me/?text=${encodeURIComponent(n.title+"\\n"+n.link)}`;
     const card = document.createElement("div");
     card.className="card";
     card.innerHTML = `
       <div class="pill">${n.source}</div>
-      <h2 class="title">
-        <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
-      </h2>
-      <div class="date">🕒 ${n.date ? formatDateTimeBR(n.date) : "Horário não informado pela fonte"}</div>
+      <h2 class="title"><a href="${n.link}" target="_blank">${n.title}</a></h2>
+      <div class="date">🕒 ${n.date ? formatDateTimeBR(n.date) : "Horário não informado"}</div>
       <div class="link">${n.link}</div>
       <div class="actions">
-        <a href="${wa}" target="_blank" rel="noopener">
-          <button>Compartilhar no WhatsApp</button>
-        </a>
+        <a href="${wa}" target="_blank"><button>Compartilhar no WhatsApp</button></a>
       </div>
     `;
     els.list.appendChild(card);
-  }
-
-  updateCountInfo();
-}
-
-function loadMore(){
-  shownCount = Math.min(shownCount + PAGE_SIZE, allFiltered.length);
-  render(false);
-}
-
-/* ================= RESUMO PARA WHATSAPP ================= */
-function openWhatsAppSummary(){
-  const totalShown = Math.min(shownCount, allFiltered.length);
-  if (!totalShown) return;
-
-  const pick = allFiltered.slice(0, totalShown).slice(0, SUMMARY_MAX);
-
-  const nowBR = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date());
-
-  const sourceLabel = (els.source.value === "ALL") ? "Todas as fontes" : els.source.value;
-
-  let msg = `🗞️ Resumo STF (${nowBR})\nFonte: ${sourceLabel}\n\n`;
-  pick.forEach((n, idx) => {
-    msg += `${idx+1}) ${n.title}\n${n.link}\n\n`;
   });
 
-  const wa = `https://wa.me/?text=${encodeURIComponent(msg.trim())}`;
-  window.open(wa, "_blank", "noopener");
+  els.countInfo.textContent = `Mostrando ${shownCount} de ${allFiltered.length}`;
+  els.loadMore.style.display = shownCount < allFiltered.length ? "inline-block" : "none";
+}
+
+/* ================= RESUMO WHATSAPP ================= */
+function openWhatsAppSummary(){
+  const pick = allFiltered.slice(0, SUMMARY_MAX);
+  if(!pick.length) return;
+
+  const now = formatDateTimeBR(new Date());
+  let msg = `🗞️ *Resumo STF* (${now})\n\n`;
+
+  pick.forEach((n,i)=>{
+    msg += `${i+1}) ${n.title}\n<${n.link}>\n\n`;
+  });
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg.trim())}`,"_blank");
 }
 
 /* ================= COLETA ================= */
@@ -335,69 +264,41 @@ async function fetchFeed(feed){
   const data = await res.json();
 
   return (data.items||[]).map(i=>{
-    const raw = i.pubDate || i.publishedDate || i.date || i.isoDate || null;
-    const d = parseFeedDate(raw);
-
+    const d = parseFeedDate(i.pubDate||i.publishedDate||i.date);
     return {
-      title: i.title || "(sem título)",
-      link: i.link || "",
-      description: i.description || "",
-      source: feed.name,
-      date: d
+      title:i.title,
+      link:i.link,
+      description:i.description||"",
+      source:feed.name,
+      date: isNaN(d)?null:d
     };
   });
 }
 
 async function run(){
-  els.refresh.disabled = true;
-  els.summary.disabled = true;
-  els.status.textContent = "Atualizando…";
+  els.status.textContent="Atualizando…";
+  els.refresh.disabled=true;
 
-  const pick = els.source.value;
-  const feeds = pick === "ALL" ? FEEDS : FEEDS.filter(f => f.name === pick);
+  let all=[];
+  const r = await Promise.allSettled(FEEDS.map(fetchFeed));
+  r.forEach(x=>x.status==="fulfilled" && all.push(...x.value));
 
-  let all = [];
-  const results = await Promise.allSettled(feeds.map(fetchFeed));
-  results.forEach(r => { if(r.status === "fulfilled") all.push(...r.value); });
+  allFiltered = [...new Map(all.filter(matchesSTF).map(i=>[i.link,i])).values()]
+    .sort((a,b)=>(b.date?.getTime?.()||0)-(a.date?.getTime?.()||0));
 
-  // filtro STF
-  let filtered = all.filter(matchesSTF);
-
-  // dedupe por link
-  filtered = [...new Map(filtered.map(i => [i.link, i])).values()];
-
-  // ordena por data: mais novo em cima (sem data vai pro final)
-  filtered.sort((a,b) => ((b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0)));
-
-  // atualiza estado + primeira página
-  allFiltered = filtered;
   shownCount = Math.min(PAGE_SIZE, allFiltered.length);
-
-  els.status.textContent = `Atualizado • ${allFiltered.length} notícia(s)`;
   render(true);
 
-  els.refresh.disabled = false;
+  els.status.textContent=`Atualizado • ${allFiltered.length} notícia(s)`;
+  els.refresh.disabled=false;
 }
 
-/* ================= INIT ================= */
-FEEDS.forEach(f=>{
-  const o=document.createElement("option");
-  o.value=f.name;
-  o.textContent=f.name;
-  els.source.appendChild(o);
-});
-
+/* ================= EVENTS ================= */
 els.refresh.addEventListener("click", run);
-els.loadMore.addEventListener("click", loadMore);
+els.loadMore.addEventListener("click", ()=>{ shownCount+=PAGE_SIZE; render(false); });
 els.summary.addEventListener("click", openWhatsAppSummary);
 
-// quando mudar jornal, atualiza
-els.source.addEventListener("change", run);
-
-// auto refresh (10 min)
-setInterval(run, 10 * 60 * 1000);
-
-// primeira carga
+setInterval(run, 10*60*1000);
 run();
 </script>
 
