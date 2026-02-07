@@ -33,7 +33,7 @@
     h1{ margin:0 0 6px 0; font-size:18px; }
     .subhead{ margin:0; font-size:12px; color:var(--muted); line-height:1.4; }
 
-    button, select{
+    button{
       border:1px solid var(--line);
       background:var(--card);
       color:var(--txt);
@@ -43,7 +43,6 @@
       cursor:pointer;
     }
     button.primary{ background:var(--brand); border-color:var(--brand); }
-    button:disabled{ opacity:.6; cursor:not-allowed; }
 
     .row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; align-items:center; }
     .status{ margin-top:10px; font-size:12px; color:var(--muted); }
@@ -89,7 +88,7 @@
 
 <header>
   <div class="wrap">
-    <h1>🗞️ Clipping automático — STF</h1>
+    <h1>Clipping automático — STF</h1>
     <p class="subhead">
       Lista única de notícias sobre o STF e seus ministros, ordenada pela hora real de publicação.
     </p>
@@ -118,11 +117,9 @@
 </footer>
 
 <script>
-/* ================= CONFIG ================= */
 const PAGE_SIZE = 30;
 const SUMMARY_MAX = 10;
 
-/* ================= FONTES (RSS) ================= */
 const FEEDS = [
   { name:"UOL", url:"https://rss.uol.com.br/feed/noticias.xml" },
   { name:"Folha de S.Paulo", url:"https://feeds.folha.uol.com.br/emcimadahora/rss091.xml" },
@@ -131,57 +128,18 @@ const FEEDS = [
   { name:"Agência Brasil", url:"https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml" },
   { name:"CNN Brasil", url:"https://www.cnnbrasil.com.br/feed/" },
   { name:"BBC Brasil", url:"https://feeds.bbci.co.uk/portuguese/rss.xml" },
-  { name:"G1", url:"https://g1.globo.com/rss/g1/" },
-  { name:"Metrópoles", url:"https://www.metropoles.com/feed" },
-  { name:"Correio Braziliense", url:"https://www.correiobraziliense.com.br/rss/ultimas.xml" },
-  { name:"Valor Econômico", url:"https://valor.globo.com/rss/valor.xml" },
-  { name:"CartaCapital", url:"https://www.cartacapital.com.br/feed/" },
-  { name:"Veja", url:"https://veja.abril.com.br/feed/" },
-  { name:"IstoÉ", url:"https://istoe.com.br/feed/" },
-  { name:"R7", url:"https://noticias.r7.com/rss.xml" },
-  { name:"JOTA", url:"https://www.jota.info/feed" },
-  { name:"Migalhas", url:"https://www.migalhas.com.br/rss" },
-  { name:"DW Brasil", url:"https://rss.dw.com/rdf/rss-pt-br" },
-  { name:"Poder360", url:"https://www.poder360.com.br/feed/" },
-  { name:"Congresso em Foco", url:"https://congressoemfoco.uol.com.br/feed/" },
-  { name:"O Tempo", url:"https://www.otempo.com.br/rss/ultimas" },
-  { name:"ConJur", url:"https://www.conjur.com.br/rss.xml" },
-  { name:"PlatôBR", url:"https://platobr.com.br/feed/" },
-  { name:"ICL Notícias", url:"https://iclnoticias.com.br/feed/" },
-  { name:"Revista Oeste", url:"https://revistaoeste.com/feed/" },
-  { name:"O Antagonista", url:"https://oantagonista.com.br/feed/" },
-  { name:"Crusoé", url:"https://revistacrusoe.com.br/feed/" }
+  { name:"G1", url:"https://g1.globo.com/rss/g1/" }
 ];
 
-/* ================= PALAVRAS-CHAVE (STF) ================= */
 const KEYWORDS = [
   "stf","supremo tribunal federal","supremo",
-  "ministro do supremo","ministros do supremo",
-  "ex-ministro do supremo","ex-ministros do supremo",
-  "edson fachin","fachin",
-  "alexandre de moraes","moraes",
-  "gilmar mendes","gilmar",
-  "carmen lucia","cármen lúcia","carmen","cármen",
-  "dias toffoli","toffoli",
-  "luiz fux","fux",
-  "flavio dino","flávio dino","dino",
-  "cristiano zanin","zanin",
-  "andre mendonca","andré mendonça","mendonça",
-  "nunes marques","nunes"
+  "alexandre de moraes","gilmar mendes","carmen lucia",
+  "dias toffoli","luiz fux","flavio dino",
+  "cristiano zanin","andre mendonca","nunes marques"
 ];
 
-/* ================= UTIL ================= */
 const RSS2JSON = url =>
   `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
-
-const els = {
-  refresh: document.getElementById("refreshBtn"),
-  summary: document.getElementById("summaryBtn"),
-  loadMore: document.getElementById("loadMoreBtn"),
-  list: document.getElementById("list"),
-  status: document.getElementById("status"),
-  countInfo: document.getElementById("countInfo")
-};
 
 function normalize(t){
   return (t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
@@ -209,22 +167,21 @@ function formatDateTimeBR(d){
   }).format(d);
 }
 
-/* ================= ESTADO ================= */
+function formatDateBR(d){
+  return new Intl.DateTimeFormat("pt-BR",{
+    timeZone:"America/Sao_Paulo",
+    day:"2-digit",month:"2-digit",year:"numeric"
+  }).format(d);
+}
+
 let allFiltered = [];
 let shownCount = 0;
 
-/* ================= RENDER ================= */
 function render(reset=false){
-  if(reset) els.list.innerHTML = "";
+  if(reset) list.innerHTML = "";
 
-  const slice = allFiltered.slice(0, shownCount);
-  if(!slice.length){
-    els.list.innerHTML = "<div class='card'>Nenhuma notícia encontrada.</div>";
-    return;
-  }
-
-  slice.slice(reset?0:shownCount-PAGE_SIZE).forEach(n=>{
-    const wa = `https://wa.me/?text=${encodeURIComponent(n.title+"\\n"+n.link)}`;
+  allFiltered.slice(reset?0:shownCount-PAGE_SIZE, shownCount).forEach(n=>{
+    const wa = `https://wa.me/?text=${encodeURIComponent(n.title+"\n"+n.link)}`;
     const card = document.createElement("div");
     card.className="card";
     card.innerHTML = `
@@ -236,29 +193,27 @@ function render(reset=false){
         <a href="${wa}" target="_blank"><button>Compartilhar no WhatsApp</button></a>
       </div>
     `;
-    els.list.appendChild(card);
+    list.appendChild(card);
   });
 
-  els.countInfo.textContent = `Mostrando ${shownCount} de ${allFiltered.length}`;
-  els.loadMore.style.display = shownCount < allFiltered.length ? "inline-block" : "none";
+  countInfo.textContent = `Mostrando ${shownCount} de ${allFiltered.length}`;
+  loadMoreBtn.style.display = shownCount < allFiltered.length ? "inline-block" : "none";
 }
 
-/* ================= RESUMO WHATSAPP ================= */
 function openWhatsAppSummary(){
   const pick = allFiltered.slice(0, SUMMARY_MAX);
   if(!pick.length) return;
 
-  const now = formatDateTimeBR(new Date());
-  let msg = `🗞️ *Resumo STF* (${now})\n\n`;
+  const today = formatDateBR(new Date());
+  let msg = `Resumo STF (${today})\n\n`;
 
   pick.forEach((n,i)=>{
-    msg += `${i+1}) ${n.title}\n<${n.link}>\n\n`;
+    msg += `${i+1}) ${n.title}\n${n.link}\n\n`;
   });
 
   window.open(`https://wa.me/?text=${encodeURIComponent(msg.trim())}`,"_blank");
 }
 
-/* ================= COLETA ================= */
 async function fetchFeed(feed){
   const res = await fetch(RSS2JSON(feed.url));
   const data = await res.json();
@@ -276,8 +231,8 @@ async function fetchFeed(feed){
 }
 
 async function run(){
-  els.status.textContent="Atualizando…";
-  els.refresh.disabled=true;
+  status.textContent="Atualizando…";
+  refreshBtn.disabled=true;
 
   let all=[];
   const r = await Promise.allSettled(FEEDS.map(fetchFeed));
@@ -289,14 +244,13 @@ async function run(){
   shownCount = Math.min(PAGE_SIZE, allFiltered.length);
   render(true);
 
-  els.status.textContent=`Atualizado • ${allFiltered.length} notícia(s)`;
-  els.refresh.disabled=false;
+  status.textContent=`Atualizado • ${allFiltered.length} notícia(s)`;
+  refreshBtn.disabled=false;
 }
 
-/* ================= EVENTS ================= */
-els.refresh.addEventListener("click", run);
-els.loadMore.addEventListener("click", ()=>{ shownCount+=PAGE_SIZE; render(false); });
-els.summary.addEventListener("click", openWhatsAppSummary);
+refreshBtn.addEventListener("click", run);
+loadMoreBtn.addEventListener("click", ()=>{ shownCount+=PAGE_SIZE; render(false); });
+summaryBtn.addEventListener("click", openWhatsAppSummary);
 
 setInterval(run, 10*60*1000);
 run();
