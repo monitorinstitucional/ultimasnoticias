@@ -1,183 +1,475 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Atualizações - STF</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Atualizações - STF</title>
 
-<style>
-:root{
-  --bg:#0b0c10;--card:#12141b;--txt:#e9eefc;--muted:#a6adbb;
-  --line:#222635;--brand:#1f6feb;
-}
-*{box-sizing:border-box}
-body{margin:0;font-family:system-ui;background:var(--bg);color:var(--txt)}
-header{position:sticky;top:0;background:rgba(11,12,16,.95);
-  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:10}
-.wrap{max-width:1100px;margin:0 auto;padding:16px}
-h1{margin:0 0 6px;font-size:18px}
-.subhead{margin:0;font-size:12px;color:var(--muted)}
-button{border:1px solid var(--line);background:var(--card);color:var(--txt);
-  border-radius:12px;padding:10px 12px;font-size:14px;cursor:pointer}
-button.primary{background:var(--brand);border-color:var(--brand)}
-.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-.status{font-size:12px;color:var(--muted);margin-top:8px}
-.grid{display:grid;gap:12px;padding:16px}
-.card{background:var(--card);border:1px solid var(--line);
-  border-radius:16px;padding:14px}
-.pill{display:inline-block;padding:6px 10px;border-radius:999px;
-  font-size:12px;border:1px solid var(--line);color:var(--muted)}
-.title{margin:8px 0;font-size:16px;font-weight:700}
-.title a{color:var(--txt);text-decoration:none}
-.title a:hover{text-decoration:underline}
-.date{font-size:12px;color:var(--muted)}
-.link{font-size:12px;margin-top:6px}
-.actions{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap}
-footer{padding:16px;font-size:12px;color:var(--muted)}
-</style>
+  <style>
+    :root{
+      --bg:#0b0c10;
+      --card:#12141b;
+      --txt:#e9eefc;
+      --muted:#a6adbb;
+      --line:#222635;
+      --brand:#1f6feb;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:var(--bg);
+      color:var(--txt);
+    }
+    header{
+      position:sticky;
+      top:0;
+      background:rgba(11,12,16,.95);
+      backdrop-filter: blur(8px);
+      border-bottom:1px solid var(--line);
+      z-index:10;
+    }
+    .wrap{ max-width:1100px; margin:0 auto; padding:16px; }
+    h1{ margin:0 0 6px 0; font-size:18px; }
+    .subhead{ margin:0; font-size:12px; color:var(--muted); line-height:1.4; }
+
+    button{
+      border:1px solid var(--line);
+      background:var(--card);
+      color:var(--txt);
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:14px;
+      cursor:pointer;
+    }
+    button.primary{ background:var(--brand); border-color:var(--brand); }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+
+    .row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; align-items:center; }
+    .status{ margin-top:10px; font-size:12px; color:var(--muted); }
+
+    .grid{ display:grid; gap:12px; padding:16px; }
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+    }
+    .pill{
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      border:1px solid var(--line);
+      color:var(--muted);
+      margin-bottom:10px;
+    }
+    .title{ margin:0; font-size:16px; font-weight:700; line-height:1.3; }
+    .title a{ color:var(--txt); text-decoration:none; }
+    .title a:hover{ text-decoration:underline; }
+
+    .date{ margin-top:6px; font-size:12px; color:var(--muted); }
+    .link{ margin-top:8px; font-size:12px; color:var(--muted); word-break:break-word; }
+
+    .actions{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
+
+    .controlsBottom{
+      padding:0 16px 24px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    footer{ padding:0 16px 24px; font-size:12px; color:var(--muted); }
+  </style>
 </head>
 
 <body>
 
 <header>
   <div class="wrap">
-    <h1>Atualização automática — STF</h1>
-    <p class="subhead">Últimas 24h • Ordenado do mais recente</p>
+    <h1>Atualização automática — Assunto: STF</h1>
+    <p class="subhead">
+      App: últimas 24h. Resumo WhatsApp: últimas 12h. Ordenado do mais novo para o mais antigo.
+    </p>
+
     <div class="row">
-      <button id="refreshBtn" class="primary">Atualizar</button>
-      <button id="summaryBtn">Resumo WhatsApp</button>
+      <button id="refreshBtn" class="primary">Atualizar agora</button>
+      <button id="summaryBtn">Gerar resumo (WhatsApp)</button>
+      <button id="dailyBtn">📰 Notícias do dia — STF (copiar)</button>
     </div>
-    <div class="status" id="status">Pronto.</div>
+
+    <div class="status" id="status">Pronta para atualizar.</div>
   </div>
 </header>
 
 <main class="wrap">
   <div class="grid" id="list"></div>
+
+  <div class="controlsBottom">
+    <button id="loadMoreBtn">Carregar mais</button>
+    <span class="status" id="countInfo"></span>
+  </div>
 </main>
 
 <footer class="wrap">
-  Agregador de links públicos. Conteúdo pertence aos veículos.
+  Este site é um agregador de links de notícias públicas. Todo o conteúdo pertence aos veículos originais.
 </footer>
 
 <script>
 /* ================= CONFIG ================= */
-const DISPLAY_HOURS = 24;
-const SUMMARY_HOURS = 12;
-const KEYWORDS = ["stf","supremo","alexandre de moraes","gilmar","dino","fachin","toffoli","fux","zanin","mendonça","nunes marques"];
+const DISPLAY_WINDOW_HOURS = 24;      // no app
+const SUMMARY_WINDOW_HOURS = 12;      // no WhatsApp
+const INITIAL_SHOW = 50;             // mostra 50 primeiro (se tiver mais)
+const LOAD_MORE_STEP = 30;           // carregar mais em blocos de 30
+const SUMMARY_MAX = 20;              // limite por segurança (WhatsApp pode ficar enorme)
 
+/* ================= FONTES (RSS) =================
+   Observação: alguns veículos falham no RSS "direto" de vez em quando.
+   Para Globo/Folha/Estadão/Valor, adicionamos um fallback via Google News RSS por site.
+*/
 const FEEDS = [
-  {name:"O Globo",url:"https://news.google.com/rss/search?q=site:oglobo.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419"},
-  {name:"Folha",url:"https://news.google.com/rss/search?q=site:folha.uol.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419"},
-  {name:"Estadão",url:"https://news.google.com/rss/search?q=site:estadao.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419"},
-  {name:"Valor",url:"https://news.google.com/rss/search?q=site:valor.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419"},
-  {name:"G1",url:"https://g1.globo.com/rss/g1/"}
+  { name:"UOL", url:"https://rss.uol.com.br/feed/noticias.xml" },
+
+  // Diretos (podem falhar)
+  { name:"Folha de S.Paulo", url:"https://feeds.folha.uol.com.br/emcimadahora/rss091.xml" },
+  { name:"Estadão", url:"https://www.estadao.com.br/rss/ultimas.xml" },
+  { name:"O Globo", url:"https://oglobo.globo.com/rss/oglobo.xml" },
+  { name:"Valor Econômico", url:"https://valor.globo.com/rss/valor.xml" },
+
+  // ✅ Fallback (bem estável): Google News RSS por site + STF
+  { name:"Folha (Google News)", url:"https://news.google.com/rss/search?q=site:folha.uol.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+  { name:"Estadão (Google News)", url:"https://news.google.com/rss/search?q=site:estadao.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+  { name:"O Globo (Google News)", url:"https://news.google.com/rss/search?q=site:oglobo.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+  { name:"Valor (Google News)", url:"https://news.google.com/rss/search?q=site:valor.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+
+  { name:"Agência Brasil", url:"https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml" },
+  { name:"CNN Brasil", url:"https://www.cnnbrasil.com.br/feed/" },
+  { name:"BBC Brasil", url:"https://feeds.bbci.co.uk/portuguese/rss.xml" },
+  { name:"G1", url:"https://g1.globo.com/rss/g1/" },
+  { name:"Metrópoles", url:"https://www.metropoles.com/feed" },
+  { name:"Correio Braziliense", url:"https://www.correiobraziliense.com.br/rss/ultimas.xml" },
+  { name:"CartaCapital", url:"https://www.cartacapital.com.br/feed/" },
+  { name:"Veja", url:"https://veja.abril.com.br/feed/" },
+  { name:"IstoÉ", url:"https://istoe.com.br/feed/" },
+  { name:"R7", url:"https://noticias.r7.com/rss.xml" },
+  { name:"JOTA", url:"https://www.jota.info/feed" },
+  { name:"Migalhas", url:"https://www.migalhas.com.br/rss" },
+  { name:"DW Brasil", url:"https://rss.dw.com/rdf/rss-pt-br" },
+  { name:"Poder360", url:"https://www.poder360.com.br/feed/" },
+  { name:"Congresso em Foco", url:"https://congressoemfoco.uol.com.br/feed/" },
+  { name:"O Tempo", url:"https://www.otempo.com.br/rss/ultimas" },
+  { name:"ConJur", url:"https://www.conjur.com.br/rss.xml" },
+  { name:"PlatôBR", url:"https://platobr.com.br/feed/" },
+  { name:"ICL Notícias", url:"https://iclnoticias.com.br/feed/" },
+  { name:"Revista Oeste", url:"https://revistaoeste.com/feed/" },
+  { name:"O Antagonista", url:"https://oantagonista.com.br/feed/" },
+  { name:"Crusoé", url:"https://revistacrusoe.com.br/feed/" }
 ];
 
-const RSS2JSON = u=>`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(u)}`;
-const els={
-  list:document.getElementById("list"),
-  refresh:document.getElementById("refreshBtn"),
-  summary:document.getElementById("summaryBtn"),
-  status:document.getElementById("status")
+/* ================= PALAVRAS-CHAVE ================= */
+const KEYWORDS = [
+  "stf","supremo tribunal federal","supremo",
+  "ministro do supremo","ministros do supremo",
+  "ex-ministro do supremo","ex-ministros do supremo",
+  "edson fachin","fachin",
+  "alexandre de moraes","moraes",
+  "gilmar mendes","gilmar",
+  "carmen lucia","cármen lúcia","carmen","cármen",
+  "dias toffoli","toffoli",
+  "luiz fux","fux",
+  "flavio dino","flávio dino","dino",
+  "cristiano zanin","zanin",
+  "andre mendonca","andré mendonça","mendonça",
+  "nunes marques","nunes"
+];
+
+/* ================= UTIL ================= */
+const RSS2JSON = url =>
+  `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
+
+const els = {
+  refresh: document.getElementById("refreshBtn"),
+  summary: document.getElementById("summaryBtn"),
+  daily: document.getElementById("dailyBtn"),
+  loadMore: document.getElementById("loadMoreBtn"),
+  list: document.getElementById("list"),
+  status: document.getElementById("status"),
+  countInfo: document.getElementById("countInfo")
 };
 
 function normalize(t){
-  return (t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  return (t||"").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
-function matches(item){
-  const t=normalize(item.title+" "+item.description);
-  return KEYWORDS.some(k=>t.includes(normalize(k)));
+function matchesTopic(item){
+  const text = normalize((item.title||"") + " " + (item.description||""));
+  return KEYWORDS.some(k => text.includes(normalize(k)));
 }
 
-/* === RESOLVE LINK ORIGINAL (remove Google News) === */
-function resolveOriginalLink(link){
+/**
+ * Parser robusto:
+ * - Se vier sem timezone, assume UTC (Z), evitando hora/dia “virar” errado.
+ */
+function parseFeedDate(raw){
+  if(!raw) return null;
+  const s0 = String(raw).trim();
+
+  // já tem timezone explícito (Z, +03:00, -0300, GMT, UTC)
+  if (/(Z|[+-]\d{2}:?\d{2}|GMT|UTC)\b/i.test(s0)) {
+    const d = new Date(s0);
+    return isNaN(d) ? null : d;
+  }
+
+  // "YYYY-MM-DD HH:MM(:SS)?"
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(s0)) {
+    let iso = s0.replace(/\s+/, "T");
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso)) iso += ":00";
+    iso += "Z";
+    const d = new Date(iso);
+    return isNaN(d) ? null : d;
+  }
+
+  // ISO sem timezone "YYYY-MM-DDTHH:MM(:SS)?"
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s0)) {
+    let iso = s0;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso)) iso += ":00";
+    iso += "Z";
+    const d = new Date(iso);
+    return isNaN(d) ? null : d;
+  }
+
+  const d = new Date(s0);
+  return isNaN(d) ? null : d;
+}
+
+function formatDateTimeBR(d){
+  return new Intl.DateTimeFormat("pt-BR",{
+    timeZone:"America/Sao_Paulo",
+    day:"2-digit", month:"2-digit", year:"numeric",
+    hour:"2-digit", minute:"2-digit"
+  }).format(d);
+}
+function formatDateBR(d){
+  return new Intl.DateTimeFormat("pt-BR",{
+    timeZone:"America/Sao_Paulo",
+    day:"2-digit", month:"2-digit", year:"numeric"
+  }).format(d);
+}
+function sameDaySP(d1, d2){
+  return formatDateBR(d1) === formatDateBR(d2);
+}
+
+async function copyText(text){
   try{
-    if(link.includes("news.google.com")){
-      const u=new URL(link);
-      const p=u.searchParams.get("url");
-      if(p) return decodeURIComponent(p);
-    }
-    return link;
-  }catch{ return link }
+    await navigator.clipboard.writeText(text);
+    els.status.textContent = "Copiado ✅";
+    setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
+  }catch(e){
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    els.status.textContent = "Copiado ✅";
+    setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
+  }
+}
+function copyTitleLink(title, link){
+  const text = `${title}\n${link}`;
+  return copyText(text);
 }
 
-function formatBR(d){
-  return new Intl.DateTimeFormat("pt-BR",{dateStyle:"short",timeStyle:"short"}).format(d);
+/* ================= ESTADO ================= */
+// allTopic = todas as notícias do assunto STF (sem recorte de 24h), já filtradas/ordenadas/dedup
+let allTopic = [];
+// appFiltered = últimas 24h (subset de allTopic)
+let appFiltered = [];
+let shownCount = 0;
+
+/* ================= RENDER ================= */
+function updateBottomBar(){
+  const total = appFiltered.length;
+  if (!total) {
+    els.countInfo.textContent = "";
+    els.loadMore.style.display = "none";
+    els.summary.disabled = true;
+    els.daily.disabled = true;
+    return;
+  }
+
+  els.countInfo.textContent = `Mostrando ${Math.min(shownCount, total)} de ${total} (últimas 24h)`;
+  els.loadMore.style.display = (shownCount < total) ? "inline-block" : "none";
+  els.summary.disabled = false;
+  els.daily.disabled = false;
 }
 
-let all=[];
+function render(reset=false){
+  if (reset) els.list.innerHTML = "";
+
+  if (!appFiltered.length) {
+    els.list.innerHTML = "<div class='card'>Nenhuma notícia encontrada nas últimas 24 horas.</div>";
+    updateBottomBar();
+    return;
+  }
+
+  const start = reset ? 0 : Math.max(0, shownCount - LOAD_MORE_STEP);
+  const slice = appFiltered.slice(start, shownCount);
+
+  slice.forEach(n => {
+    const wa = `https://wa.me/?text=${encodeURIComponent((n.title||"") + "\n" + (n.link||""))}`;
+
+    const card = document.createElement("div");
+    card.className="card";
+    card.innerHTML = `
+      <div class="pill">${n.source}</div>
+      <h2 class="title">
+        <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
+      </h2>
+      <div class="date">🕒 ${n.date ? formatDateTimeBR(n.date) : "Horário não informado"}</div>
+      <div class="link">${n.link}</div>
+      <div class="actions">
+        <a href="${wa}" target="_blank" rel="noopener"><button>Compartilhar no WhatsApp</button></a>
+        <button data-copy="1">📋 Copiar título + link</button>
+      </div>
+    `;
+
+    // botão copiar (sem precisar escapar string em HTML)
+    card.querySelector('button[data-copy="1"]').addEventListener("click", () => {
+      copyTitleLink(n.title || "", n.link || "");
+    });
+
+    els.list.appendChild(card);
+  });
+
+  updateBottomBar();
+}
+
+/* ================= WHATSAPP SUMMARY (últimas 12h) ================= */
+function openWhatsAppSummary(){
+  if (!appFiltered.length) return;
+
+  const now = Date.now();
+  const cutoff12 = now - (SUMMARY_WINDOW_HOURS * 60 * 60 * 1000);
+
+  const last12h = appFiltered.filter(n => n.date && n.date.getTime() >= cutoff12);
+
+  const today = formatDateBR(new Date());
+  let msg = `Resumo STF (${today})\n\n`;
+
+  const toSend = last12h.slice(0, SUMMARY_MAX);
+  toSend.forEach((n, i) => {
+    // ✅ enumerado
+    msg += `${i+1}) ${n.title}\n${n.link}\n\n`;
+  });
+
+  if (last12h.length > SUMMARY_MAX) {
+    msg += `(+${last12h.length - SUMMARY_MAX} notícia(s) nas últimas 12h)\n`;
+  }
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg.trim())}`, "_blank", "noopener");
+}
+
+/* ================= NOTÍCIAS DO DIA (texto completo) =================
+   - Título: "NOTÍCIAS DO DIA - STF"
+   - Data abaixo
+   - Lista com "título" em uma linha e "link" na outra (sem numeração)
+*/
+async function copyDailyNews(){
+  if (!allTopic.length) return;
+
+  const now = new Date();
+  const todayStr = formatDateBR(now);
+
+  const todayItems = allTopic.filter(n => n.date && sameDaySP(n.date, now));
+
+  let text = `NOTÍCIAS DO DIA - STF\n${todayStr}\n\n`;
+
+  if (!todayItems.length) {
+    text += "(Sem notícias do STF registradas hoje.)";
+    await copyText(text);
+    return;
+  }
+
+  text += todayItems.map(n => `${n.title}\n${n.link}`).join("\n\n");
+  await copyText(text);
+}
 
 /* ================= FETCH ================= */
 async function fetchFeed(feed){
-  const r=await fetch(RSS2JSON(feed.url));
-  const j=await r.json();
-  return (j.items||[]).map(i=>{
-    const d=new Date(i.pubDate||i.date||i.isoDate||null);
-    return{
-      title:i.title||"(sem título)",
-      link:resolveOriginalLink(i.link||""),
-      description:i.description||"",
-      source:feed.name,
-      date:isNaN(d)?null:d
+  const res = await fetch(RSS2JSON(feed.url));
+  const data = await res.json();
+
+  return (data.items||[]).map(i => {
+    const raw = i.pubDate || i.publishedDate || i.date || i.isoDate || null;
+    const d = parseFeedDate(raw);
+    return {
+      title: i.title || "(sem título)",
+      link: i.link || "",
+      description: i.description || "",
+      source: feed.name,
+      date: d
     };
   });
 }
 
-/* ================= RENDER ================= */
-function render(){
-  els.list.innerHTML="";
-  if(!all.length){
-    els.list.innerHTML="<div class='card'>Nenhuma notícia.</div>";
-    return;
-  }
-  all.forEach(n=>{
-    const wa=`https://wa.me/?text=${encodeURIComponent(n.title+"\n"+n.link)}`;
-    const card=document.createElement("div");
-    card.className="card";
-    card.innerHTML=`
-      <div class="pill">${n.source}</div>
-      <h2 class="title"><a href="${n.link}" target="_blank">${n.title}</a></h2>
-      <div class="date">${n.date?formatBR(n.date):""}</div>
-      <div class="link"><a href="${n.link}" target="_blank">Abrir matéria original</a></div>
-      <div class="actions">
-        <a href="${wa}" target="_blank"><button>WhatsApp</button></a>
-        <button>📋 Copiar título + link</button>
-      </div>`;
-    card.querySelector("button:last-child").onclick=()=>{
-      navigator.clipboard.writeText(n.title+"\n"+n.link);
-      els.status.textContent="Copiado!";
-      setTimeout(()=>els.status.textContent="Pronto.",1500);
-    };
-    els.list.appendChild(card);
-  });
+function dedupeByLink(items){
+  return [...new Map(items.map(i => [i.link, i])).values()];
 }
 
 /* ================= RUN ================= */
 async function run(){
-  els.status.textContent="Atualizando…";
-  let items=[];
-  const res=await Promise.allSettled(FEEDS.map(fetchFeed));
-  res.forEach(r=>r.status==="fulfilled"&&items.push(...r.value));
-  const now=Date.now();
-  all=[...new Map(items.filter(matches)
-    .filter(i=>i.date&&(now-i.date.getTime())<=DISPLAY_HOURS*3600000)
-    .sort((a,b)=>b.date-a.date)
-    .map(i=>[i.link,i])).values()];
-  render();
-  els.status.textContent=`Atualizado • ${all.length} notícia(s)`;
+  els.status.textContent = "Atualizando…";
+  els.refresh.disabled = true;
+  els.summary.disabled = true;
+  els.daily.disabled = true;
+
+  let all = [];
+  const results = await Promise.allSettled(FEEDS.map(fetchFeed));
+  results.forEach(r => { if (r.status === "fulfilled") all.push(...r.value); });
+
+  // filtro por assunto
+  let filtered = all.filter(matchesTopic);
+
+  // remove duplicados
+  filtered = dedupeByLink(filtered);
+
+  // remove sem data (pra respeitar 24h/12h e "notícias do dia")
+  filtered = filtered.filter(n => n.date && !isNaN(n.date));
+
+  // ordena por data (mais novo primeiro)
+  filtered.sort((a,b) => (b.date.getTime() - a.date.getTime()));
+
+  // guarda "tudo do tema" (para o botão de notícias do dia)
+  allTopic = filtered;
+
+  // janela de 24h (app)
+  const now = Date.now();
+  const cutoff24 = now - (DISPLAY_WINDOW_HOURS * 60 * 60 * 1000);
+  appFiltered = filtered.filter(n => n.date.getTime() >= cutoff24);
+
+  // primeiro lote
+  shownCount = Math.min(INITIAL_SHOW, appFiltered.length);
+  render(true);
+
+  els.status.textContent = `Atualizado • ${appFiltered.length} notícia(s) (últimas 24h)`;
+  els.refresh.disabled = false;
+  updateBottomBar();
 }
 
-function summary(){
-  const now=Date.now();
-  const cut=now-SUMMARY_HOURS*3600000;
-  let msg="Resumo STF\n\n";
-  all.filter(n=>n.date&&n.date.getTime()>=cut)
-     .forEach((n,i)=>msg+=`${i+1}) ${n.title}\n${n.link}\n\n`);
-  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`);
-}
+/* ================= EVENTS ================= */
+els.refresh.addEventListener("click", run);
+els.loadMore.addEventListener("click", () => {
+  shownCount = Math.min(shownCount + LOAD_MORE_STEP, appFiltered.length);
+  render(false);
+});
+els.summary.addEventListener("click", openWhatsAppSummary);
+els.daily.addEventListener("click", copyDailyNews);
 
-els.refresh.onclick=run;
-els.summary.onclick=summary;
+// auto refresh (10 min)
+setInterval(run, 10 * 60 * 1000);
 run();
 </script>
 
