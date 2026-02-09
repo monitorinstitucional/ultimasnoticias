@@ -69,23 +69,7 @@
     .title a:hover{ text-decoration:underline; }
 
     .date{ margin-top:6px; font-size:12px; color:var(--muted); }
-
-    /* ✅ LINKS CORRIGIDOS */
-    .link{
-      margin-top:8px;
-      font-size:12px;
-      color:var(--muted);
-      overflow-wrap:anywhere;
-      word-break:normal;
-      line-height:1.35;
-    }
-    .link a{
-      color:var(--muted);
-      text-decoration:none;
-    }
-    .link a:hover{
-      text-decoration:underline;
-    }
+    .link{ margin-top:8px; font-size:12px; color:var(--muted); word-break:break-word; }
 
     .actions{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
 
@@ -135,20 +119,26 @@
 
 <script>
 /* ================= CONFIG ================= */
-const DISPLAY_WINDOW_HOURS = 24;
-const SUMMARY_WINDOW_HOURS = 12;
-const INITIAL_SHOW = 50;
-const LOAD_MORE_STEP = 30;
-const SUMMARY_MAX = 20;
+const DISPLAY_WINDOW_HOURS = 24;      // no app
+const SUMMARY_WINDOW_HOURS = 12;      // no WhatsApp
+const INITIAL_SHOW = 50;             // mostra 50 primeiro (se tiver mais)
+const LOAD_MORE_STEP = 30;           // carregar mais em blocos de 30
+const SUMMARY_MAX = 20;              // limite por segurança (WhatsApp pode ficar enorme)
 
-/* ================= FONTES (RSS) ================= */
+/* ================= FONTES (RSS) =================
+   Observação: alguns veículos falham no RSS "direto" de vez em quando.
+   Para Globo/Folha/Estadão/Valor, adicionamos um fallback via Google News RSS por site.
+*/
 const FEEDS = [
   { name:"UOL", url:"https://rss.uol.com.br/feed/noticias.xml" },
+
+  // Diretos (podem falhar)
   { name:"Folha de S.Paulo", url:"https://feeds.folha.uol.com.br/emcimadahora/rss091.xml" },
   { name:"Estadão", url:"https://www.estadao.com.br/rss/ultimas.xml" },
   { name:"O Globo", url:"https://oglobo.globo.com/rss/oglobo.xml" },
   { name:"Valor Econômico", url:"https://valor.globo.com/rss/valor.xml" },
 
+  // ✅ Fallback (bem estável): Google News RSS por site + STF
   { name:"Folha (Google News)", url:"https://news.google.com/rss/search?q=site:folha.uol.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
   { name:"Estadão (Google News)", url:"https://news.google.com/rss/search?q=site:estadao.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
   { name:"O Globo (Google News)", url:"https://news.google.com/rss/search?q=site:oglobo.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
@@ -181,10 +171,18 @@ const FEEDS = [
 /* ================= PALAVRAS-CHAVE ================= */
 const KEYWORDS = [
   "stf","supremo tribunal federal","supremo",
-  "edson fachin","alexandre de moraes","gilmar mendes",
-  "cármen lúcia","dias toffoli","luiz fux",
-  "flávio dino","cristiano zanin",
-  "andré mendonça","nunes marques"
+  "ministro do supremo","ministros do supremo",
+  "ex-ministro do supremo","ex-ministros do supremo",
+  "edson fachin","fachin",
+  "alexandre de moraes","moraes",
+  "gilmar mendes","gilmar",
+  "carmen lucia","cármen lúcia","carmen","cármen",
+  "dias toffoli","toffoli",
+  "luiz fux","fux",
+  "flavio dino","flávio dino","dino",
+  "cristiano zanin","zanin",
+  "andre mendonca","andré mendonça","mendonça",
+  "nunes marques","nunes"
 ];
 
 /* ================= UTIL ================= */
@@ -192,73 +190,268 @@ const RSS2JSON = url =>
   `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
 
 const els = {
-  refresh: refreshBtn,
-  summary: summaryBtn,
-  daily: dailyBtn,
-  loadMore: loadMoreBtn,
-  list,
-  status,
-  countInfo
+  refresh: document.getElementById("refreshBtn"),
+  summary: document.getElementById("summaryBtn"),
+  daily: document.getElementById("dailyBtn"),
+  loadMore: document.getElementById("loadMoreBtn"),
+  list: document.getElementById("list"),
+  status: document.getElementById("status"),
+  countInfo: document.getElementById("countInfo")
 };
 
-const normalize = t =>
-  (t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function normalize(t){
+  return (t||"").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+}
+function matchesTopic(item){
+  const text = normalize((item.title||"") + " " + (item.description||""));
+  return KEYWORDS.some(k => text.includes(normalize(k)));
+}
 
-const matchesTopic = i =>
-  KEYWORDS.some(k => normalize((i.title||"")+i.description).includes(normalize(k)));
+/**
+ * Parser robusto:
+ * - Se vier sem timezone, assume UTC (Z), evitando hora/dia “virar” errado.
+ */
+function parseFeedDate(raw){
+  if(!raw) return null;
+  const s0 = String(raw).trim();
 
-function parseFeedDate(d){ const x=new Date(d); return isNaN(x)?null:x; }
-const formatDateTimeBR = d => new Intl.DateTimeFormat("pt-BR",{dateStyle:"short",timeStyle:"short"}).format(d);
+  // já tem timezone explícito (Z, +03:00, -0300, GMT, UTC)
+  if (/(Z|[+-]\d{2}:?\d{2}|GMT|UTC)\b/i.test(s0)) {
+    const d = new Date(s0);
+    return isNaN(d) ? null : d;
+  }
+
+  // "YYYY-MM-DD HH:MM(:SS)?"
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(s0)) {
+    let iso = s0.replace(/\s+/, "T");
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso)) iso += ":00";
+    iso += "Z";
+    const d = new Date(iso);
+    return isNaN(d) ? null : d;
+  }
+
+  // ISO sem timezone "YYYY-MM-DDTHH:MM(:SS)?"
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s0)) {
+    let iso = s0;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(iso)) iso += ":00";
+    iso += "Z";
+    const d = new Date(iso);
+    return isNaN(d) ? null : d;
+  }
+
+  const d = new Date(s0);
+  return isNaN(d) ? null : d;
+}
+
+function formatDateTimeBR(d){
+  return new Intl.DateTimeFormat("pt-BR",{
+    timeZone:"America/Sao_Paulo",
+    day:"2-digit", month:"2-digit", year:"numeric",
+    hour:"2-digit", minute:"2-digit"
+  }).format(d);
+}
+function formatDateBR(d){
+  return new Intl.DateTimeFormat("pt-BR",{
+    timeZone:"America/Sao_Paulo",
+    day:"2-digit", month:"2-digit", year:"numeric"
+  }).format(d);
+}
+function sameDaySP(d1, d2){
+  return formatDateBR(d1) === formatDateBR(d2);
+}
+
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    els.status.textContent = "Copiado ✅";
+    setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
+  }catch(e){
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    els.status.textContent = "Copiado ✅";
+    setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
+  }
+}
+function copyTitleLink(title, link){
+  const text = `${title}\n${link}`;
+  return copyText(text);
+}
+
+/* ================= ESTADO ================= */
+let allTopic = [];
+let appFiltered = [];
+let shownCount = 0;
 
 /* ================= RENDER ================= */
-let allTopic=[], appFiltered=[], shownCount=0;
+function updateBottomBar(){
+  const total = appFiltered.length;
+  if (!total) {
+    els.countInfo.textContent = "";
+    els.loadMore.style.display = "none";
+    els.summary.disabled = true;
+    els.daily.disabled = true;
+    return;
+  }
+
+  els.countInfo.textContent = `Mostrando ${Math.min(shownCount, total)} de ${total} (últimas 24h)`;
+  els.loadMore.style.display = (shownCount < total) ? "inline-block" : "none";
+  els.summary.disabled = false;
+  els.daily.disabled = false;
+}
 
 function render(reset=false){
-  if(reset) list.innerHTML="";
-  appFiltered.slice(reset?0:shownCount-LOAD_MORE_STEP, shownCount).forEach(n=>{
-    const wa=`https://wa.me/?text=${encodeURIComponent(n.title+"\n"+n.link)}`;
-    const c=document.createElement("div");
-    c.className="card";
-    c.innerHTML=`
+  if (reset) els.list.innerHTML = "";
+
+  if (!appFiltered.length) {
+    els.list.innerHTML = "<div class='card'>Nenhuma notícia encontrada nas últimas 24 horas.</div>";
+    updateBottomBar();
+    return;
+  }
+
+  const start = reset ? 0 : Math.max(0, shownCount - LOAD_MORE_STEP);
+  const slice = appFiltered.slice(start, shownCount);
+
+  slice.forEach(n => {
+    const wa = `https://wa.me/?text=${encodeURIComponent((n.title||"") + "\n" + (n.link||""))}`;
+
+    const card = document.createElement("div");
+    card.className="card";
+    card.innerHTML = `
       <div class="pill">${n.source}</div>
-      <h2 class="title"><a href="${n.link}" target="_blank">${n.title}</a></h2>
-      <div class="date">🕒 ${formatDateTimeBR(n.date)}</div>
-      <div class="link"><a href="${n.link}" target="_blank">${n.link}</a></div>
+      <h2 class="title">
+        <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
+      </h2>
+      <div class="date">🕒 ${n.date ? formatDateTimeBR(n.date) : "Horário não informado"}</div>
+      <div class="link">${n.link}</div>
       <div class="actions">
-        <a href="${wa}" target="_blank"><button>WhatsApp</button></a>
-        <button onclick="navigator.clipboard.writeText('${n.title}\\n${n.link}')">📋 Copiar</button>
-      </div>`;
-    list.appendChild(c);
+        <a href="${wa}" target="_blank" rel="noopener"><button>Compartilhar no WhatsApp</button></a>
+        <button data-copy="1">📋 Copiar título + link</button>
+      </div>
+    `;
+
+    card.querySelector('button[data-copy="1"]').addEventListener("click", () => {
+      copyTitleLink(n.title || "", n.link || "");
+    });
+
+    els.list.appendChild(card);
   });
-  countInfo.textContent=`Mostrando ${shownCount} de ${appFiltered.length}`;
-  loadMore.style.display=shownCount<appFiltered.length?"inline-block":"none";
+
+  updateBottomBar();
+}
+
+/* ================= WHATSAPP SUMMARY (últimas 12h) ================= */
+function openWhatsAppSummary(){
+  if (!appFiltered.length) return;
+
+  const now = Date.now();
+  const cutoff12 = now - (SUMMARY_WINDOW_HOURS * 60 * 60 * 1000);
+
+  const last12h = appFiltered.filter(n => n.date && n.date.getTime() >= cutoff12);
+
+  const today = formatDateBR(new Date());
+  let msg = `Resumo STF (${today})\n\n`;
+
+  const toSend = last12h.slice(0, SUMMARY_MAX);
+  toSend.forEach((n, i) => {
+    msg += `${i+1}) ${n.title}\n${n.link}\n\n`;
+  });
+
+  if (last12h.length > SUMMARY_MAX) {
+    msg += `(+${last12h.length - SUMMARY_MAX} notícia(s) nas últimas 12h)\n`;
+  }
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg.trim())}`, "_blank", "noopener");
+}
+
+/* ================= NOTÍCIAS DO DIA (texto completo) ================= */
+async function copyDailyNews(){
+  if (!allTopic.length) return;
+
+  const now = new Date();
+  const todayStr = formatDateBR(now);
+
+  const todayItems = allTopic.filter(n => n.date && sameDaySP(n.date, now));
+
+  let text = `NOTÍCIAS DO DIA - STF\n${todayStr}\n\n`;
+
+  if (!todayItems.length) {
+    text += "(Sem notícias do STF registradas hoje.)";
+    await copyText(text);
+    return;
+  }
+
+  text += todayItems.map(n => `${n.title}\n${n.link}`).join("\n\n");
+  await copyText(text);
 }
 
 /* ================= FETCH ================= */
-async function run(){
-  status.textContent="Atualizando…";
-  let all=[];
-  const res=await Promise.allSettled(FEEDS.map(f=>fetch(RSS2JSON(f.url)).then(r=>r.json())));
-  res.forEach((r,i)=>{
-    if(r.status==="fulfilled"){
-      r.value.items.forEach(it=>{
-        const d=parseFeedDate(it.pubDate||it.isoDate);
-        if(d) all.push({title:it.title,link:it.link,description:it.description,source:FEEDS[i].name,date:d});
-      });
-    }
+async function fetchFeed(feed){
+  const res = await fetch(RSS2JSON(feed.url));
+  const data = await res.json();
+
+  return (data.items||[]).map(i => {
+    const raw = i.pubDate || i.publishedDate || i.date || i.isoDate || null;
+    const d = parseFeedDate(raw);
+    return {
+      title: i.title || "(sem título)",
+      link: i.link || "",
+      description: i.description || "",
+      source: feed.name,
+      date: d
+    };
   });
-  all=all.filter(matchesTopic).sort((a,b)=>b.date-a.date);
-  allTopic=all;
-  const cutoff=Date.now()-24*3600000;
-  appFiltered=all.filter(n=>n.date.getTime()>=cutoff);
-  shownCount=Math.min(INITIAL_SHOW,appFiltered.length);
-  render(true);
-  status.textContent=`Atualizado • ${appFiltered.length} notícia(s)`;
 }
 
-refreshBtn.onclick=run;
-loadMoreBtn.onclick=()=>{shownCount=Math.min(shownCount+LOAD_MORE_STEP,appFiltered.length);render();};
+function dedupeByLink(items){
+  return [...new Map(items.map(i => [i.link, i])).values()];
+}
 
+/* ================= RUN ================= */
+async function run(){
+  els.status.textContent = "Atualizando…";
+  els.refresh.disabled = true;
+  els.summary.disabled = true;
+  els.daily.disabled = true;
+
+  let all = [];
+  const results = await Promise.allSettled(FEEDS.map(fetchFeed));
+  results.forEach(r => { if (r.status === "fulfilled") all.push(...r.value); });
+
+  let filtered = all.filter(matchesTopic);
+  filtered = dedupeByLink(filtered);
+  filtered = filtered.filter(n => n.date && !isNaN(n.date));
+  filtered.sort((a,b) => (b.date.getTime() - a.date.getTime()));
+
+  allTopic = filtered;
+
+  const now = Date.now();
+  const cutoff24 = now - (DISPLAY_WINDOW_HOURS * 60 * 60 * 1000);
+  appFiltered = filtered.filter(n => n.date.getTime() >= cutoff24);
+
+  shownCount = Math.min(INITIAL_SHOW, appFiltered.length);
+  render(true);
+
+  els.status.textContent = `Atualizado • ${appFiltered.length} notícia(s) (últimas 24h)`;
+  els.refresh.disabled = false;
+  updateBottomBar();
+}
+
+/* ================= EVENTS ================= */
+els.refresh.addEventListener("click", run);
+els.loadMore.addEventListener("click", () => {
+  shownCount = Math.min(shownCount + LOAD_MORE_STEP, appFiltered.length);
+  render(false);
+});
+els.summary.addEventListener("click", openWhatsAppSummary);
+els.daily.addEventListener("click", copyDailyNews);
+
+// auto refresh (10 min)
+setInterval(run, 10 * 60 * 1000);
 run();
 </script>
 
