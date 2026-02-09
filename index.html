@@ -97,6 +97,7 @@
     <div class="row">
       <button id="refreshBtn" class="primary">Atualizar agora</button>
       <button id="summaryBtn">Gerar resumo (WhatsApp)</button>
+      <button id="dailyBtn">📰 Notícias do dia — STF (copiar)</button>
     </div>
 
     <div class="status" id="status">Pronta para atualizar.</div>
@@ -124,19 +125,31 @@ const INITIAL_SHOW = 50;             // mostra 50 primeiro (se tiver mais)
 const LOAD_MORE_STEP = 30;           // carregar mais em blocos de 30
 const SUMMARY_MAX = 20;              // limite por segurança (WhatsApp pode ficar enorme)
 
-/* ================= FONTES (RSS) ================= */
+/* ================= FONTES (RSS) =================
+   Observação: alguns veículos falham no RSS "direto" de vez em quando.
+   Para Globo/Folha/Estadão/Valor, adicionamos um fallback via Google News RSS por site.
+*/
 const FEEDS = [
   { name:"UOL", url:"https://rss.uol.com.br/feed/noticias.xml" },
+
+  // Diretos (podem falhar)
   { name:"Folha de S.Paulo", url:"https://feeds.folha.uol.com.br/emcimadahora/rss091.xml" },
   { name:"Estadão", url:"https://www.estadao.com.br/rss/ultimas.xml" },
   { name:"O Globo", url:"https://oglobo.globo.com/rss/oglobo.xml" },
+  { name:"Valor Econômico", url:"https://valor.globo.com/rss/valor.xml" },
+
+  // ✅ Fallback (bem estável): Google News RSS por site + STF
+  { name:"Folha (Google News)", url:"https://news.google.com/rss/search?q=site:folha.uol.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+  { name:"Estadão (Google News)", url:"https://news.google.com/rss/search?q=site:estadao.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+  { name:"O Globo (Google News)", url:"https://news.google.com/rss/search?q=site:oglobo.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+  { name:"Valor (Google News)", url:"https://news.google.com/rss/search?q=site:valor.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
+
   { name:"Agência Brasil", url:"https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml" },
   { name:"CNN Brasil", url:"https://www.cnnbrasil.com.br/feed/" },
   { name:"BBC Brasil", url:"https://feeds.bbci.co.uk/portuguese/rss.xml" },
   { name:"G1", url:"https://g1.globo.com/rss/g1/" },
   { name:"Metrópoles", url:"https://www.metropoles.com/feed" },
   { name:"Correio Braziliense", url:"https://www.correiobraziliense.com.br/rss/ultimas.xml" },
-  { name:"Valor Econômico", url:"https://valor.globo.com/rss/valor.xml" },
   { name:"CartaCapital", url:"https://www.cartacapital.com.br/feed/" },
   { name:"Veja", url:"https://veja.abril.com.br/feed/" },
   { name:"IstoÉ", url:"https://istoe.com.br/feed/" },
@@ -179,6 +192,7 @@ const RSS2JSON = url =>
 const els = {
   refresh: document.getElementById("refreshBtn"),
   summary: document.getElementById("summaryBtn"),
+  daily: document.getElementById("dailyBtn"),
   loadMore: document.getElementById("loadMoreBtn"),
   list: document.getElementById("list"),
   status: document.getElementById("status"),
@@ -242,9 +256,36 @@ function formatDateBR(d){
     day:"2-digit", month:"2-digit", year:"numeric"
   }).format(d);
 }
+function sameDaySP(d1, d2){
+  return formatDateBR(d1) === formatDateBR(d2);
+}
+
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    els.status.textContent = "Copiado ✅";
+    setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
+  }catch(e){
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    els.status.textContent = "Copiado ✅";
+    setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
+  }
+}
+function copyTitleLink(title, link){
+  const text = `${title}\n${link}`;
+  return copyText(text);
+}
 
 /* ================= ESTADO ================= */
-// appFiltered = últimas 24h (já filtradas, ordenadas, sem duplicados)
+// allTopic = todas as notícias do assunto STF (sem recorte de 24h), já filtradas/ordenadas/dedup
+let allTopic = [];
+// appFiltered = últimas 24h (subset de allTopic)
 let appFiltered = [];
 let shownCount = 0;
 
@@ -255,12 +296,14 @@ function updateBottomBar(){
     els.countInfo.textContent = "";
     els.loadMore.style.display = "none";
     els.summary.disabled = true;
+    els.daily.disabled = true;
     return;
   }
 
   els.countInfo.textContent = `Mostrando ${Math.min(shownCount, total)} de ${total} (últimas 24h)`;
   els.loadMore.style.display = (shownCount < total) ? "inline-block" : "none";
   els.summary.disabled = false;
+  els.daily.disabled = false;
 }
 
 function render(reset=false){
@@ -289,8 +332,15 @@ function render(reset=false){
       <div class="link">${n.link}</div>
       <div class="actions">
         <a href="${wa}" target="_blank" rel="noopener"><button>Compartilhar no WhatsApp</button></a>
+        <button data-copy="1">📋 Copiar título + link</button>
       </div>
     `;
+
+    // botão copiar (sem precisar escapar string em HTML)
+    card.querySelector('button[data-copy="1"]').addEventListener("click", () => {
+      copyTitleLink(n.title || "", n.link || "");
+    });
+
     els.list.appendChild(card);
   });
 
@@ -311,6 +361,7 @@ function openWhatsAppSummary(){
 
   const toSend = last12h.slice(0, SUMMARY_MAX);
   toSend.forEach((n, i) => {
+    // ✅ enumerado
     msg += `${i+1}) ${n.title}\n${n.link}\n\n`;
   });
 
@@ -319,6 +370,31 @@ function openWhatsAppSummary(){
   }
 
   window.open(`https://wa.me/?text=${encodeURIComponent(msg.trim())}`, "_blank", "noopener");
+}
+
+/* ================= NOTÍCIAS DO DIA (texto completo) =================
+   - Título: "NOTÍCIAS DO DIA - STF"
+   - Data abaixo
+   - Lista com "título" em uma linha e "link" na outra (sem numeração)
+*/
+async function copyDailyNews(){
+  if (!allTopic.length) return;
+
+  const now = new Date();
+  const todayStr = formatDateBR(now);
+
+  const todayItems = allTopic.filter(n => n.date && sameDaySP(n.date, now));
+
+  let text = `NOTÍCIAS DO DIA - STF\n${todayStr}\n\n`;
+
+  if (!todayItems.length) {
+    text += "(Sem notícias do STF registradas hoje.)";
+    await copyText(text);
+    return;
+  }
+
+  text += todayItems.map(n => `${n.title}\n${n.link}`).join("\n\n");
+  await copyText(text);
 }
 
 /* ================= FETCH ================= */
@@ -348,6 +424,7 @@ async function run(){
   els.status.textContent = "Atualizando…";
   els.refresh.disabled = true;
   els.summary.disabled = true;
+  els.daily.disabled = true;
 
   let all = [];
   const results = await Promise.allSettled(FEEDS.map(fetchFeed));
@@ -359,11 +436,14 @@ async function run(){
   // remove duplicados
   filtered = dedupeByLink(filtered);
 
-  // remove sem data (pra respeitar 24h/12h)
+  // remove sem data (pra respeitar 24h/12h e "notícias do dia")
   filtered = filtered.filter(n => n.date && !isNaN(n.date));
 
   // ordena por data (mais novo primeiro)
   filtered.sort((a,b) => (b.date.getTime() - a.date.getTime()));
+
+  // guarda "tudo do tema" (para o botão de notícias do dia)
+  allTopic = filtered;
 
   // janela de 24h (app)
   const now = Date.now();
@@ -376,6 +456,7 @@ async function run(){
 
   els.status.textContent = `Atualizado • ${appFiltered.length} notícia(s) (últimas 24h)`;
   els.refresh.disabled = false;
+  updateBottomBar();
 }
 
 /* ================= EVENTS ================= */
@@ -385,6 +466,7 @@ els.loadMore.addEventListener("click", () => {
   render(false);
 });
 els.summary.addEventListener("click", openWhatsAppSummary);
+els.daily.addEventListener("click", copyDailyNews);
 
 // auto refresh (10 min)
 setInterval(run, 10 * 60 * 1000);
