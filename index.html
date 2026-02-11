@@ -69,7 +69,18 @@
     .title a:hover{ text-decoration:underline; }
 
     .date{ margin-top:6px; font-size:12px; color:var(--muted); }
-    .link{ margin-top:8px; font-size:12px; color:var(--muted); word-break:break-word; }
+
+    /* ✅ Link “curto” (não estoura o card) */
+    .link{
+      margin-top:8px;
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .link a{ color:var(--muted); text-decoration:none; }
+    .link a:hover{ text-decoration:underline; }
 
     .actions{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
 
@@ -91,7 +102,7 @@
   <div class="wrap">
     <h1>Atualização automática — Assunto: STF</h1>
     <p class="subhead">
-      App: últimas 24h. Resumo WhatsApp: últimas 12h. Ordenado do mais novo para o mais antigo.
+      App: últimas 48h. Resumo WhatsApp: últimas 12h. Ordenado do mais novo para o mais antigo.
     </p>
 
     <div class="row">
@@ -119,60 +130,64 @@
 
 <script>
 /* ================= CONFIG ================= */
-const DISPLAY_WINDOW_HOURS = 24;      // no app
-const SUMMARY_WINDOW_HOURS = 12;      // no WhatsApp
-const INITIAL_SHOW = 50;             // mostra 50 primeiro (se tiver mais)
-const LOAD_MORE_STEP = 30;           // carregar mais em blocos de 30
-const SUMMARY_MAX = 20;              // limite por segurança (WhatsApp pode ficar enorme)
+const DISPLAY_WINDOW_HOURS = 48;      // ✅ mais volume
+const SUMMARY_WINDOW_HOURS = 12;      // WhatsApp
+const INITIAL_SHOW = 80;             // ✅ mostra mais logo de cara
+const LOAD_MORE_STEP = 40;           // ✅ carregar mais em blocos maiores
+const SUMMARY_MAX = 25;              // ✅ um pouco mais (cuidado pra não explodir no WhatsApp)
 
-/* ================= FONTES (RSS) =================
-   Observação: alguns veículos falham no RSS "direto" de vez em quando.
-   Para Globo/Folha/Estadão/Valor, adicionamos um fallback via Google News RSS por site.
+/* ================= GOOGLE NEWS (RSS) =================
+   ✅ Puxar do Google Notícias para os mesmos jornais (por site:dominio + query)
 */
+const GOOGLE_NEWS = (domain, query) =>
+  `https://news.google.com/rss/search?q=${encodeURIComponent(`site:${domain} ${query}`)}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
+
+// ✅ Query mais “larga” pra vir muita coisa (e o seu filtro por keywords decide o que entra)
+const GN_QUERY =
+  `(STF OR "Supremo Tribunal Federal" OR Supremo OR "Alexandre de Moraes" OR "Edson Fachin" OR "Gilmar Mendes" OR "Cármen Lúcia" OR "Dias Toffoli" OR "Luiz Fux" OR "Flávio Dino" OR "Cristiano Zanin" OR "André Mendonça" OR "Nunes Marques" OR "Kassio Nunes")`;
+
 const FEEDS = [
-  { name:"UOL", url:"https://rss.uol.com.br/feed/noticias.xml" },
+  { name:"UOL", domain:"uol.com.br" },
+  { name:"Folha de S.Paulo", domain:"folha.uol.com.br" },
+  { name:"Estadão", domain:"estadao.com.br" },
+  { name:"O Globo", domain:"oglobo.globo.com" },
+  { name:"Valor Econômico", domain:"valor.globo.com" },
+  { name:"Agência Brasil", domain:"agenciabrasil.ebc.com.br" },
+  { name:"CNN Brasil", domain:"cnnbrasil.com.br" },
+  { name:"BBC Brasil", domain:"bbc.com" },
+  { name:"G1", domain:"g1.globo.com" },
+  { name:"Metrópoles", domain:"metropoles.com" },
+  { name:"Correio Braziliense", domain:"correiobraziliense.com.br" },
+  { name:"CartaCapital", domain:"cartacapital.com.br" },
+  { name:"Veja", domain:"veja.abril.com.br" },
+  { name:"IstoÉ", domain:"istoe.com.br" },
+  { name:"R7", domain:"noticias.r7.com" },
+  { name:"JOTA", domain:"jota.info" },
+  { name:"Migalhas", domain:"migalhas.com.br" },
+  { name:"DW Brasil", domain:"dw.com" },
+  { name:"Poder360", domain:"poder360.com.br" },
+  { name:"Congresso em Foco", domain:"congressoemfoco.uol.com.br" },
+  { name:"O Tempo", domain:"otempo.com.br" },
+  { name:"ConJur", domain:"conjur.com.br" },
+  { name:"PlatôBR", domain:"platobr.com.br" },
+  { name:"ICL Notícias", domain:"iclnoticias.com.br" },
+  { name:"Revista Oeste", domain:"revistaoeste.com" },
+  { name:"O Antagonista", domain:"oantagonista.com.br" },
+  { name:"Crusoé", domain:"revistacrusoe.com.br" }
+].map(v => ({
+  name: v.name,
+  url: GOOGLE_NEWS(v.domain, GN_QUERY),
+  isGoogleNews: true
+}));
 
-  // Diretos (podem falhar)
-  { name:"Folha de S.Paulo", url:"https://feeds.folha.uol.com.br/emcimadahora/rss091.xml" },
-  { name:"Estadão", url:"https://www.estadao.com.br/rss/ultimas.xml" },
-  { name:"O Globo", url:"https://oglobo.globo.com/rss/oglobo.xml" },
-  { name:"Valor Econômico", url:"https://valor.globo.com/rss/valor.xml" },
-
-  // ✅ Fallback (bem estável): Google News RSS por site + STF
-  { name:"Folha (Google News)", url:"https://news.google.com/rss/search?q=site:folha.uol.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
-  { name:"Estadão (Google News)", url:"https://news.google.com/rss/search?q=site:estadao.com.br%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
-  { name:"O Globo (Google News)", url:"https://news.google.com/rss/search?q=site:oglobo.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
-  { name:"Valor (Google News)", url:"https://news.google.com/rss/search?q=site:valor.globo.com%20STF&hl=pt-BR&gl=BR&ceid=BR:pt-419" },
-
-  { name:"Agência Brasil", url:"https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml" },
-  { name:"CNN Brasil", url:"https://www.cnnbrasil.com.br/feed/" },
-  { name:"BBC Brasil", url:"https://feeds.bbci.co.uk/portuguese/rss.xml" },
-  { name:"G1", url:"https://g1.globo.com/rss/g1/" },
-  { name:"Metrópoles", url:"https://www.metropoles.com/feed" },
-  { name:"Correio Braziliense", url:"https://www.correiobraziliense.com.br/rss/ultimas.xml" },
-  { name:"CartaCapital", url:"https://www.cartacapital.com.br/feed/" },
-  { name:"Veja", url:"https://veja.abril.com.br/feed/" },
-  { name:"IstoÉ", url:"https://istoe.com.br/feed/" },
-  { name:"R7", url:"https://noticias.r7.com/rss.xml" },
-  { name:"JOTA", url:"https://www.jota.info/feed" },
-  { name:"Migalhas", url:"https://www.migalhas.com.br/rss" },
-  { name:"DW Brasil", url:"https://rss.dw.com/rdf/rss-pt-br" },
-  { name:"Poder360", url:"https://www.poder360.com.br/feed/" },
-  { name:"Congresso em Foco", url:"https://congressoemfoco.uol.com.br/feed/" },
-  { name:"O Tempo", url:"https://www.otempo.com.br/rss/ultimas" },
-  { name:"ConJur", url:"https://www.conjur.com.br/rss.xml" },
-  { name:"PlatôBR", url:"https://platobr.com.br/feed/" },
-  { name:"ICL Notícias", url:"https://iclnoticias.com.br/feed/" },
-  { name:"Revista Oeste", url:"https://revistaoeste.com/feed/" },
-  { name:"O Antagonista", url:"https://oantagonista.com.br/feed/" },
-  { name:"Crusoé", url:"https://revistacrusoe.com.br/feed/" }
-];
-
-/* ================= PALAVRAS-CHAVE ================= */
+/* ================= PALAVRAS-CHAVE =================
+   ✅ removi "nunes" sozinho (pra não pegar governador de SP e outros)
+*/
 const KEYWORDS = [
   "stf","supremo tribunal federal","supremo",
   "ministro do supremo","ministros do supremo",
   "ex-ministro do supremo","ex-ministros do supremo",
+
   "edson fachin","fachin",
   "alexandre de moraes","moraes",
   "gilmar mendes","gilmar",
@@ -182,7 +197,9 @@ const KEYWORDS = [
   "flavio dino","flávio dino","dino",
   "cristiano zanin","zanin",
   "andre mendonca","andré mendonça","mendonça",
-  "nunes marques","nunes"
+
+  /* ✅ Nunes Marques específico */
+  "nunes marques","kassio nunes","kássio nunes","kassio nunes marques","kássio nunes marques"
 ];
 
 /* ================= UTIL ================= */
@@ -202,9 +219,29 @@ const els = {
 function normalize(t){
   return (t||"").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
+
+/* ✅ evita falso positivo do “Nunes” genérico */
 function matchesTopic(item){
   const text = normalize((item.title||"") + " " + (item.description||""));
-  return KEYWORDS.some(k => text.includes(normalize(k)));
+
+  const hasSTF =
+    text.includes("stf") ||
+    text.includes("supremo tribunal federal") ||
+    text.includes("supremo");
+
+  const hasNunesMarques =
+    text.includes("nunes marques") ||
+    text.includes("kassio nunes") ||
+    text.includes("kassio nunes marques") ||
+    text.includes("kassio") && text.includes("nunes marques") ||
+    text.includes("ministro nunes marques") ||
+    text.includes("ministro kassio") ||
+    text.includes("ministro kassio nunes");
+
+  // keywords gerais (já sem “nunes” solto)
+  const other = KEYWORDS.some(k => text.includes(normalize(k)));
+
+  return hasSTF || hasNunesMarques || other;
 }
 
 /**
@@ -266,7 +303,6 @@ async function copyText(text){
     els.status.textContent = "Copiado ✅";
     setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
   }catch(e){
-    // fallback
     const ta = document.createElement("textarea");
     ta.value = text;
     document.body.appendChild(ta);
@@ -277,9 +313,45 @@ async function copyText(text){
     setTimeout(()=> els.status.textContent = "Pronta para atualizar.", 1500);
   }
 }
+
+/* ✅ Copiar título + link (original) */
 function copyTitleLink(title, link){
   const text = `${title}\n${link}`;
   return copyText(text);
+}
+
+/* ✅ “Link curtinho” */
+function cleanUrl(u){
+  try{
+    return new URL(u);
+  }catch(e){
+    return null;
+  }
+}
+function displayLink(u){
+  const url = cleanUrl(u);
+  if(!url) return u || "";
+  const path = (url.pathname || "/");
+  const shortPath = path.length > 36 ? (path.slice(0,36) + "…") : path;
+  return `${url.hostname}${shortPath}`;
+}
+
+/* ✅ Tenta abrir a matéria original quando vier link do Google News */
+function unwrapGoogleNewsLink(link){
+  try{
+    const u = new URL(link);
+
+    // alguns formatos trazem url/u como parâmetro
+    const urlParam = u.searchParams.get("url");
+    if (urlParam) return urlParam;
+
+    const uParam = u.searchParams.get("u");
+    if (uParam) return uParam;
+
+    return link;
+  }catch(e){
+    return link;
+  }
 }
 
 /* ================= ESTADO ================= */
@@ -298,7 +370,7 @@ function updateBottomBar(){
     return;
   }
 
-  els.countInfo.textContent = `Mostrando ${Math.min(shownCount, total)} de ${total} (últimas 24h)`;
+  els.countInfo.textContent = `Mostrando ${Math.min(shownCount, total)} de ${total} (últimas ${DISPLAY_WINDOW_HOURS}h)`;
   els.loadMore.style.display = (shownCount < total) ? "inline-block" : "none";
   els.summary.disabled = false;
   els.daily.disabled = false;
@@ -308,7 +380,7 @@ function render(reset=false){
   if (reset) els.list.innerHTML = "";
 
   if (!appFiltered.length) {
-    els.list.innerHTML = "<div class='card'>Nenhuma notícia encontrada nas últimas 24 horas.</div>";
+    els.list.innerHTML = `<div class="card">Nenhuma notícia encontrada nas últimas ${DISPLAY_WINDOW_HOURS} horas.</div>`;
     updateBottomBar();
     return;
   }
@@ -327,7 +399,9 @@ function render(reset=false){
         <a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>
       </h2>
       <div class="date">🕒 ${n.date ? formatDateTimeBR(n.date) : "Horário não informado"}</div>
-      <div class="link">${n.link}</div>
+      <div class="link">
+        <a href="${n.link}" target="_blank" rel="noopener">${displayLink(n.link)}</a>
+      </div>
       <div class="actions">
         <a href="${wa}" target="_blank" rel="noopener"><button>Compartilhar no WhatsApp</button></a>
         <button data-copy="1">📋 Copiar título + link</button>
@@ -350,7 +424,6 @@ function openWhatsAppSummary(){
 
   const now = Date.now();
   const cutoff12 = now - (SUMMARY_WINDOW_HOURS * 60 * 60 * 1000);
-
   const last12h = appFiltered.filter(n => n.date && n.date.getTime() >= cutoff12);
 
   const today = formatDateBR(new Date());
@@ -374,7 +447,6 @@ async function copyDailyNews(){
 
   const now = new Date();
   const todayStr = formatDateBR(now);
-
   const todayItems = allTopic.filter(n => n.date && sameDaySP(n.date, now));
 
   let text = `NOTÍCIAS DO DIA - STF\n${todayStr}\n\n`;
@@ -397,9 +469,13 @@ async function fetchFeed(feed){
   return (data.items||[]).map(i => {
     const raw = i.pubDate || i.publishedDate || i.date || i.isoDate || null;
     const d = parseFeedDate(raw);
+
+    let link = i.link || "";
+    if (feed.isGoogleNews) link = unwrapGoogleNewsLink(link);
+
     return {
       title: i.title || "(sem título)",
-      link: i.link || "",
+      link,
       description: i.description || "",
       source: feed.name,
       date: d
@@ -430,13 +506,13 @@ async function run(){
   allTopic = filtered;
 
   const now = Date.now();
-  const cutoff24 = now - (DISPLAY_WINDOW_HOURS * 60 * 60 * 1000);
-  appFiltered = filtered.filter(n => n.date.getTime() >= cutoff24);
+  const cutoff = now - (DISPLAY_WINDOW_HOURS * 60 * 60 * 1000);
+  appFiltered = filtered.filter(n => n.date.getTime() >= cutoff);
 
   shownCount = Math.min(INITIAL_SHOW, appFiltered.length);
   render(true);
 
-  els.status.textContent = `Atualizado • ${appFiltered.length} notícia(s) (últimas 24h)`;
+  els.status.textContent = `Atualizado • ${appFiltered.length} notícia(s) (últimas ${DISPLAY_WINDOW_HOURS}h)`;
   els.refresh.disabled = false;
   updateBottomBar();
 }
@@ -450,8 +526,14 @@ els.loadMore.addEventListener("click", () => {
 els.summary.addEventListener("click", openWhatsAppSummary);
 els.daily.addEventListener("click", copyDailyNews);
 
-// auto refresh (10 min)
-setInterval(run, 10 * 60 * 1000);
+/* ✅ Atualização mais rápida */
+setInterval(run, 3 * 60 * 1000); // 3 min
+
+/* ✅ Atualiza quando você volta pra aba (sensação de “tempo real”) */
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) run();
+});
+
 run();
 </script>
 
